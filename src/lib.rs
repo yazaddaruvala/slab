@@ -90,7 +90,7 @@ impl<T, I : Index> Slab<T, I> {
     }
 
     #[inline]
-    pub fn contains(&self, idx : I) -> bool {
+    pub fn contains(&self, idx: &I) -> bool {
         let idx = match self.global_to_local_idx(idx) {
             Some(idx) => idx,
             None => return false,
@@ -103,7 +103,7 @@ impl<T, I : Index> Slab<T, I> {
         false
     }
 
-    pub fn get(&self, idx: I) -> Option<&T> {
+    pub fn get(&self, idx: &I) -> Option<&T> {
         let idx = some!(self.global_to_local_idx(idx));
 
         if idx < self.entries.len() {
@@ -113,7 +113,7 @@ impl<T, I : Index> Slab<T, I> {
         None
     }
 
-    pub fn get_mut(&mut self, idx: I) -> Option<&mut T> {
+    pub fn get_mut(&mut self, idx: &I) -> Option<&mut T> {
         let idx = some!(self.global_to_local_idx(idx));
 
         if idx < self.entries.len() {
@@ -156,7 +156,7 @@ impl<T, I : Index> Slab<T, I> {
     }
 
     /// Releases the given slot
-    pub fn remove(&mut self, idx: I) -> Option<T> {
+    pub fn remove(&mut self, idx: &I) -> Option<T> {
         let idx = some!(self.global_to_local_idx(idx));
 
         if idx >= self.entries.len() {
@@ -173,7 +173,7 @@ impl<T, I : Index> Slab<T, I> {
         }
     }
 
-    pub fn replace(&mut self, idx: I, t : T) -> Option<T> {
+    pub fn replace(&mut self, idx: &I, t : T) -> Option<T> {
         let idx = some!(self.global_to_local_idx(idx));
 
         if idx > self.entries.len() {
@@ -195,7 +195,7 @@ impl<T, I : Index> Slab<T, I> {
     /// Returns Err(()) if slot was empty
     ///
     /// This method is very useful for storing state machines inside Slab
-    pub fn replace_with<F>(&mut self, idx: I, fun: F)
+    pub fn replace_with<F>(&mut self, idx: &I, fun: F)
         -> Result<(), ()>
         where F: FnOnce(T) -> Option<T>
     {
@@ -240,7 +240,7 @@ impl<T, I : Index> Slab<T, I> {
         panic!("invalid index {} -- greater than capacity {}", idx, self.entries.len());
     }
 
-    fn global_to_local_idx(&self, idx: I) -> Option<usize> {
+    fn global_to_local_idx(&self, idx: &I) -> Option<usize> {
         let idx = idx.as_usize();
         let off = self.off.as_usize();
 
@@ -256,10 +256,10 @@ impl<T, I : Index> Slab<T, I> {
     }
 }
 
-impl<T, I : Index> ops::Index<I> for Slab<T, I> {
+impl<'i, T, I: Index> ops::Index<&'i I> for Slab<T, I> {
     type Output = T;
 
-    fn index<'a>(&'a self, idx: I) -> &'a T {
+    fn index<'a>(&'a self, idx: &'i I) -> &'a T {
         let idx = self.global_to_local_idx(idx).expect("invalid index");
         let idx = self.validate_idx(idx);
 
@@ -268,8 +268,8 @@ impl<T, I : Index> ops::Index<I> for Slab<T, I> {
     }
 }
 
-impl<T, I : Index> ops::IndexMut<I> for Slab<T, I> {
-    fn index_mut<'a>(&'a mut self, idx: I) -> &'a mut T {
+impl<'i, T, I: Index> ops::IndexMut<&'i I> for Slab<T, I> {
+    fn index_mut<'a>(&'a mut self, idx: &I) -> &'a mut T {
         let idx = self.global_to_local_idx(idx).expect("invalid index");
         let idx = self.validate_idx(idx);
 
@@ -404,7 +404,7 @@ mod tests {
     fn test_insertion() {
         let mut slab = Slab::<usize, usize>::new(1);
         let idx = slab.insert(10).ok().expect("Failed to insert");
-        assert_eq!(slab[idx], 10);
+        assert_eq!(slab[&idx], 10);
     }
 
     #[test]
@@ -413,7 +413,7 @@ mod tests {
 
         for i in (0..10) {
             let idx= slab.insert(i + 10).ok().expect("Failed to insert");
-            assert_eq!(slab[idx], i + 10);
+            assert_eq!(slab[&idx], i + 10);
         }
 
         slab.insert(20).err().expect("Inserted when full");
@@ -427,11 +427,11 @@ mod tests {
         for i in 0..10 {
             let idx = slab.insert(i + 10).ok().expect("Failed to insert");
             indices.push(idx);
-            assert_eq!(slab[idx], i + 10);
+            assert_eq!(slab[&idx], i + 10);
         }
 
         for &i in indices.iter() {
-            slab.remove(i);
+            slab.remove(&i);
         }
 
         slab.insert(20).ok().expect("Failed to insert in newly empty slab");
@@ -447,17 +447,17 @@ mod tests {
     #[test]
     fn test_removal_at_boundries() {
         let mut slab = Slab::<usize, usize>::new(1);
-        assert_eq!(slab.remove(0), None);
-        assert_eq!(slab.remove(1), None);
+        assert_eq!(slab.remove(&0), None);
+        assert_eq!(slab.remove(&1), None);
     }
 
     #[test]
     fn test_removal_is_successful() {
         let mut slab = Slab::<usize, usize>::new(1);
         let t1 = slab.insert(10).ok().expect("Failed to insert");
-        slab.remove(t1);
+        slab.remove(&t1);
         let t2 = slab.insert(20).ok().expect("Failed to insert");
-        assert_eq!(slab[t2], 20);
+        assert_eq!(slab[&t2], 20);
     }
 
     #[test]
@@ -465,9 +465,9 @@ mod tests {
         let mut slab = Slab::<_, usize>::new(1);
         let t1 = slab.insert("foo".to_string()).ok().expect("Failed to insert");
 
-        slab[t1].push_str("bar");
+        slab[&t1].push_str("bar");
 
-        assert_eq!(&slab[t1][..], "foobar");
+        assert_eq!(&slab[&t1][..], "foobar");
     }
 
     #[test]
@@ -481,17 +481,17 @@ mod tests {
         assert!(slab.count() == 2);
         assert!(slab.remaining() == 14);
 
-        slab.remove(t0);
+        slab.remove(&t0);
 
         assert!(slab.count() == 1, "actual={}", slab.count());
         assert!(slab.remaining() == 15);
 
-        slab.remove(t1);
+        slab.remove(&t1);
 
         assert!(slab.count() == 0);
         assert!(slab.remaining() == 16);
 
-        let _ = slab[t1];
+        let _ = slab[&t1];
     }
 
     #[test]
@@ -500,20 +500,20 @@ mod tests {
 
         let t0 = slab.insert(123).unwrap();
 
-        assert!(slab[t0] == 123);
-        assert!(slab.remove(t0) == Some(123));
+        assert!(slab[&t0] == 123);
+        assert!(slab.remove(&t0) == Some(123));
 
         let t0 = slab.insert(456).unwrap();
 
-        assert!(slab[t0] == 456);
+        assert!(slab[&t0] == 456);
 
         let t1 = slab.insert(789).unwrap();
 
-        assert!(slab[t0] == 456);
-        assert!(slab[t1] == 789);
+        assert!(slab[&t0] == 456);
+        assert!(slab[&t1] == 789);
 
-        assert!(slab.remove(t0).unwrap() == 456);
-        assert!(slab.remove(t1).unwrap() == 789);
+        assert!(slab.remove(&t0).unwrap() == 456);
+        assert!(slab.remove(&t1).unwrap() == 789);
 
         assert!(slab.count() == 0);
     }
@@ -522,16 +522,16 @@ mod tests {
     #[should_panic]
     fn test_accessing_out_of_bounds() {
         let slab = Slab::<usize, usize>::new(16);
-        slab[0];
+        slab[&0];
     }
 
     #[test]
     fn test_contains() {
         let mut slab = Slab::new_starting_at(5 ,16);
-        assert!(!slab.contains(0));
+        assert!(!slab.contains(&0));
 
         let idx = slab.insert(111).unwrap();
-        assert!(slab.contains(idx));
+        assert!(slab.contains(&idx));
     }
 
     #[test]
@@ -544,7 +544,7 @@ mod tests {
         let vals: Vec<u32> = slab.iter().map(|r| *r).collect();
         assert_eq!(vals, vec![0, 1, 2, 3]);
 
-        slab.remove(1);
+        slab.remove(&1);
 
         let vals: Vec<u32> = slab.iter().map(|r| *r).collect();
         assert_eq!(vals, vec![0, 2, 3]);
@@ -563,7 +563,7 @@ mod tests {
         let vals: Vec<u32> = slab.iter().map(|r| *r).collect();
         assert_eq!(vals, vec![1, 2, 3, 4]);
 
-        slab.remove(2);
+        slab.remove(&2);
         for e in slab.iter_mut() {
             *e = *e + 1;
         }
@@ -576,9 +576,9 @@ mod tests {
     fn test_get() {
         let mut slab = Slab::<usize, usize>::new(16);
         let tok = slab.insert(5).unwrap();
-        assert_eq!(slab.get(tok), Some(&5));
-        assert_eq!(slab.get(1), None);
-        assert_eq!(slab.get(23), None);
+        assert_eq!(slab.get(&tok), Some(&5));
+        assert_eq!(slab.get(&1), None);
+        assert_eq!(slab.get(&23), None);
     }
 
     #[test]
@@ -586,27 +586,27 @@ mod tests {
         let mut slab = Slab::<u32, usize>::new(16);
         let tok = slab.insert(5u32).unwrap();
         {
-            let mut_ref = slab.get_mut(tok).unwrap();
+            let mut_ref = slab.get_mut(&tok).unwrap();
             assert_eq!(*mut_ref, 5);
             *mut_ref = 12;
         }
-        assert_eq!(slab[tok], 12);
-        assert_eq!(slab.get_mut(1), None);
-        assert_eq!(slab.get_mut(23), None);
+        assert_eq!(slab[&tok], 12);
+        assert_eq!(slab.get_mut(&1), None);
+        assert_eq!(slab.get_mut(&23), None);
     }
 
     #[test]
     fn test_replace_with() {
         let mut slab = Slab::<u32, usize>::new(16);
         let tok = slab.insert(5u32).unwrap();
-        assert!(slab.replace_with(tok, |x| Some(x+1)).is_ok());
-        assert!(slab.replace_with(tok+1, |x| Some(x+1)).is_err());
-        assert_eq!(slab[tok], 6);
+        assert!(slab.replace_with(&tok, |x| Some(x+1)).is_ok());
+        assert!(slab.replace_with(&(tok+1), |x| Some(x+1)).is_err());
+        assert_eq!(slab[&tok], 6);
     }
 
     #[test]
     fn test_invalid_index_with_starting_at() {
         let slab = Slab::<u32, usize>::new_starting_at(1, 1);
-        assert_eq!(slab.get(0), None);
+        assert_eq!(slab.get(&0), None);
     }
 }
